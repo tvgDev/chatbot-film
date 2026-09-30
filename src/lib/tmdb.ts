@@ -15,7 +15,21 @@ interface TMDBResponse {
   results: Movie[];
 }
 
+export async function getMovieById(id: number): Promise<Movie | null> {
+  const API_KEY = process.env.TMDB_API_KEY;
+  if (!API_KEY) return null;
+  const url = new URL(`${TMDB_BASE_URL}/movie/${id}`);
+  url.searchParams.append('language', 'pt-BR');
+  url.searchParams.append('api_key', API_KEY);
+  try {
+    const res = await fetch(url.toString(), { headers: { accept: 'application/json' }});
+    if (!res.ok) return null;
+    return await res.json() as Movie;
+  } catch(e) { return null; }
+}
+
 export async function searchMovie(query: string): Promise<Movie[]> {
+  if (!query || query === 'undefined') return [];
   const API_KEY = process.env.TMDB_API_KEY;
   if (!API_KEY) throw new Error("TMDB_API_KEY is not defined");
   
@@ -47,7 +61,18 @@ export async function searchMovie(query: string): Promise<Movie[]> {
   }
 
   const data = await response.json() as TMDBResponse;
-  return data.results.slice(0, 5);
+  let results = data.results;
+
+  // Se não encontrou nada, tentar uma busca mais genérica (antes dos dois-pontos ou primeira palavra)
+  if (results.length === 0 && query.includes(':')) {
+    const simplifiedQuery = query.split(':')[0].trim();
+    return searchMovie(simplifiedQuery);
+  } else if (results.length === 0 && query.split(' ').length > 3) {
+    const simplifiedQuery = query.split(' ').slice(0, 2).join(' ');
+    return searchMovie(simplifiedQuery);
+  }
+
+  return results.slice(0, 5);
 }
 
 export async function searchPersonId(name: string): Promise<string | null> {
@@ -74,6 +99,7 @@ export async function discoverMovies(params: {
   with_genres?: string;
   primary_release_year?: string;
   primary_release_date_lte?: string;
+  release_date_lte?: string;
   sort_by?: string;
   with_cast?: string;
 }): Promise<Movie[]> {
@@ -86,6 +112,7 @@ export async function discoverMovies(params: {
   if (params.with_genres) url.searchParams.append('with_genres', params.with_genres);
   if (params.primary_release_year) url.searchParams.append('primary_release_year', params.primary_release_year);
   if (params.primary_release_date_lte) url.searchParams.append('primary_release_date.lte', params.primary_release_date_lte);
+  if (params.release_date_lte) url.searchParams.append('release_date.lte', params.release_date_lte);
   if (params.sort_by) url.searchParams.append('sort_by', params.sort_by);
   if (params.with_cast) url.searchParams.append('with_cast', params.with_cast);
   
@@ -159,14 +186,30 @@ export async function getMovieProviders(movieId: number): Promise<WatchProvider[
 export async function getSimilarMovies(movieId: number): Promise<Movie[]> {
   const API_KEY = process.env.TMDB_API_KEY;
   if (!API_KEY) return [];
-  const url = new URL(`${TMDB_BASE_URL}/movie/${movieId}/similar`);
-  url.searchParams.append('language', 'pt-BR');
-  url.searchParams.append('api_key', API_KEY);
+  
+  // O endpoint de recommendations é infinitamente mais inteligente que o similar no TMDB
+  const urlRec = new URL(`${TMDB_BASE_URL}/movie/${movieId}/recommendations`);
+  urlRec.searchParams.append('language', 'pt-BR');
+  urlRec.searchParams.append('api_key', API_KEY);
+  
   try {
-    const res = await fetch(url.toString(), { headers: { accept: 'application/json' }});
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.results || []).slice(0, 4);
+    const res = await fetch(urlRec.toString(), { headers: { accept: 'application/json' }});
+    if (res.ok) {
+      const data = await res.json();
+      if (data.results && data.results.length >= 4) {
+        return data.results.slice(0, 4);
+      }
+    }
+    
+    // Fallback para similar se recomendações estiver vazio
+    const urlSim = new URL(`${TMDB_BASE_URL}/movie/${movieId}/similar`);
+    urlSim.searchParams.append('language', 'pt-BR');
+    urlSim.searchParams.append('api_key', API_KEY);
+    
+    const resSim = await fetch(urlSim.toString(), { headers: { accept: 'application/json' }});
+    if (!resSim.ok) return [];
+    const dataSim = await resSim.json();
+    return (dataSim.results || []).slice(0, 4);
   } catch(e) { return []; }
 }
 

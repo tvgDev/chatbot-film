@@ -4,6 +4,7 @@ import { useChat } from '@ai-sdk/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Film, Sparkles, Loader2, PlayCircle, Star, X, Search, ArrowRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import type { Movie } from '@/lib/tmdb';
 
 export default function Chatbot() {
@@ -132,17 +133,17 @@ export default function Chatbot() {
                     ? 'bg-white/10 backdrop-blur-md text-white px-6 py-3 rounded-full text-[15px] font-medium border border-white/5'
                     : 'w-full text-zinc-300'
                     }`}>
-                    {(!m.parts || m.parts.length === 0) && (
-                      <div className="prose prose-invert max-w-none text-[15px] leading-relaxed whitespace-pre-wrap">
-                        {/* Placeholder case */}
-                      </div>
-                    )}
+
 
                     {m.parts?.map((part, index) => {
                       if (part.type === 'text') {
                         return (
                           <div key={index} className="prose prose-invert max-w-none text-[15px] leading-relaxed whitespace-pre-wrap">
-                            {part.text}
+                            <ReactMarkdown>
+                              {m.role === 'user' 
+                                ? part.text.replace(/Fale sobre o filme com ID \d+ \((.*?)\)/, 'Fale sobre o filme "$1"') 
+                                : part.text}
+                            </ReactMarkdown>
                           </div>
                         );
                       }
@@ -164,7 +165,9 @@ export default function Chatbot() {
                             if (movie.error) {
                               return (
                                 <div key={toolCallId} className="mt-4 flex flex-col gap-3">
-                                  <div className="prose prose-invert max-w-none text-[15px] leading-relaxed whitespace-pre-wrap">{movie.comentario}</div>
+                                  <div className="prose prose-invert max-w-none text-[15px] leading-relaxed whitespace-pre-wrap">
+                                    <ReactMarkdown>{movie.comentario?.replace(/\\n/g, '\n')}</ReactMarkdown>
+                                  </div>
                                   <div className="text-sm text-zinc-400 italic">Filme não encontrado no banco de dados para exibir a imagem.</div>
                                 </div>
                               );
@@ -174,7 +177,7 @@ export default function Chatbot() {
                               <div key={toolCallId} className="mt-8 flex flex-col gap-6">
                                 {movie.comentario && (
                                   <div className="prose prose-invert max-w-none text-lg text-zinc-200 leading-relaxed whitespace-pre-wrap">
-                                    {movie.comentario}
+                                    <ReactMarkdown>{movie.comentario.replace(/\\n/g, '\n')}</ReactMarkdown>
                                   </div>
                                 )}
 
@@ -235,7 +238,8 @@ export default function Chatbot() {
                                             className="flex flex-col gap-1.5 group cursor-pointer" 
                                             title={s.title}
                                             onClick={() => {
-                                              sendMessage({ role: 'user', parts: [{ type: 'text', text: `Fale sobre o filme ${s.title}` }] });
+                                              const text = `Fale sobre o filme com ID ${s.id} (${s.title})`;
+                                              sendMessage({ role: 'user', parts: [{ type: 'text', text }] });
                                             }}
                                           >
                                             <div className="overflow-hidden rounded-lg">
@@ -262,14 +266,14 @@ export default function Chatbot() {
                           }
 
                           const movies = Array.isArray(resultObj) ? resultObj : (resultObj?.results || []);
-                          const comentario = !Array.isArray(resultObj) ? resultObj?.comentario : null;
+                          const comentario = !Array.isArray(resultObj) && resultObj?.comentario ? resultObj.comentario.replace(/\\n/g, '\n') : null;
 
                           if (!movies || movies.length === 0) {
                             return (
                               <div key={toolCallId} className="mt-8 flex flex-col gap-4">
                                 {comentario && (
                                   <div className="prose prose-invert max-w-none text-lg text-zinc-200 leading-relaxed whitespace-pre-wrap mb-2">
-                                    {comentario}
+                                    <ReactMarkdown>{comentario}</ReactMarkdown>
                                   </div>
                                 )}
                                 <div className="text-sm text-zinc-500 italic">Nenhum filme encontrado. Debug info:</div>
@@ -284,7 +288,7 @@ export default function Chatbot() {
                             <div key={toolCallId} className="mt-8 flex flex-col gap-4">
                               {comentario && (
                                 <div className="prose prose-invert max-w-none text-lg text-zinc-200 leading-relaxed whitespace-pre-wrap mb-2">
-                                  {comentario}
+                                  <ReactMarkdown>{comentario}</ReactMarkdown>
                                 </div>
                               )}
                               <div className="flex gap-4 overflow-x-auto pb-4 pt-2 scrollbar-hide snap-x">
@@ -293,14 +297,24 @@ export default function Chatbot() {
                                     key={movie.id}
                                     whileHover={{ y: -5, scale: 1.02 }}
                                     className="snap-start shrink-0 w-36 md:w-44 flex flex-col gap-2 group cursor-pointer"
+                                    onClick={() => {
+                                      const text = `Fale sobre o filme com ID ${movie.id} (${movie.title})`;
+                                      sendMessage({ role: 'user', parts: [{ type: 'text', text }] });
+                                    }}
                                   >
                                     <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-zinc-800 border border-white/10 shadow-xl">
-                                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                                      <img
-                                        src={movie.poster_url}
-                                        alt={movie.title}
-                                        className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-110"
-                                      />
+                                      {movie.poster_url ? (
+                                        /* eslint-disable-next-line @next/next/no-img-element */
+                                        <img
+                                          src={movie.poster_url}
+                                          alt={movie.title}
+                                          className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-110"
+                                        />
+                                      ) : (
+                                        <div className="w-full h-full bg-zinc-800/80 flex items-center justify-center p-4 text-center text-zinc-500 text-xs border border-zinc-700/50">
+                                          {movie.title}
+                                        </div>
+                                      )}
                                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center pb-4">
                                         <PlayCircle className="text-white w-10 h-10 drop-shadow-md" />
                                       </div>
@@ -312,11 +326,6 @@ export default function Chatbot() {
                                     <div>
                                       <h3 className="font-semibold text-sm line-clamp-1 group-hover:text-rose-400 transition-colors" title={movie.title}>{movie.title}</h3>
                                       <p className="text-xs text-zinc-500">{movie.release_date ? movie.release_date.split('-')[0] : 'N/A'}</p>
-                                      {movie.overview && (
-                                        <p className="text-[11px] text-zinc-400 mt-1.5 line-clamp-4 leading-relaxed" title={movie.overview}>
-                                          {movie.overview}
-                                        </p>
-                                      )}
                                     </div>
                                   </motion.div>
                                 ))}
